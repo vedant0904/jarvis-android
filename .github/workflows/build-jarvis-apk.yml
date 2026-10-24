@@ -1,0 +1,63 @@
+
+name: Build JARVIS debug APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "*.zip"
+      - ".github/workflows/build-jarvis-apk.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Find and extract project ZIP
+        shell: bash
+        run: |
+          set -e
+          ZIP_FILE="$(find "$GITHUB_WORKSPACE" -maxdepth 1 -type f -iname '*.zip' | head -n 1)"
+          if [ -z "$ZIP_FILE" ]; then
+            echo "No project ZIP found in repository root."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/jarvis-source"
+          unzip -q "$ZIP_FILE" -d "$RUNNER_TEMP/jarvis-source"
+          SETTINGS_FILE="$(find "$RUNNER_TEMP/jarvis-source" -type f -name settings.gradle.kts | head -n 1)"
+          if [ -z "$SETTINGS_FILE" ]; then
+            echo "Could not find settings.gradle.kts inside ZIP."
+            exit 1
+          fi
+          echo "PROJECT_DIR=$(dirname "$SETTINGS_FILE")" >> "$GITHUB_ENV"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Build debug APK
+        run: |
+          cd "$PROJECT_DIR"
+          gradle --no-daemon assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: JARVIS-debug-APK
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+          
